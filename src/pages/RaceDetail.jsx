@@ -365,4 +365,89 @@ export default function RaceDetail() {
             {race?.prize_money ? ` · £${parseInt(race.prize_money).toLocaleString()}` : ''}
           </div>
         </div>
-        <button onClick={runAnalysis
+        <button onClick={runAnalysis} disabled={analysing} style={styles.analyseBtn}>
+          {analysing ? '🤖 Analysing...' : '🤖 Run AI Analysis'}
+        </button>
+      </div>
+
+      <div style={styles.body}>
+        {aiAnalysis && (
+          <div style={styles.aiSection}>
+            <div style={styles.aiHeader}>
+              <span style={{ fontSize: 20 }}>🤖</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>AI Race Analysis</div>
+                <div style={{ fontSize: 12, color: C.muted }}>Claude's expert verdict on this race</div>
+              </div>
+              {aiAnalysis.selection && (
+                <div style={styles.selectionBox}>
+                  <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Selection</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.accent }}>{aiAnalysis.selection}</div>
+                  {aiAnalysis.confidence && <div style={{ fontSize: 11, color: C.muted }}>Confidence: {aiAnalysis.confidence}%</div>}
+                </div>
+              )}
+            </div>
+            <div style={styles.aiText}>
+              {(aiAnalysis.analysis || '').split('\n').map((line, i) => (
+                <p key={i} style={{ margin: '5px 0', lineHeight: 1.75, color: line.includes('MY SELECTION') ? C.accent : line.startsWith('#') || /^\d+\./.test(line.trim()) ? C.text : C.muted }}>
+                  {line}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!aiAnalysis && (
+          <div style={styles.noAnalysis}>
+            <div style={{ fontSize: 32 }}>🤖</div>
+            <div style={{ color: C.muted, marginTop: 8 }}>
+              No AI analysis yet. Click "Run AI Analysis" to get Claude's expert verdict.
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 13, color: C.muted, marginBottom: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+            Runners — ranked by analysis score
+          </div>
+          {orderedRunners.map((runner, i) => (
+            <HorseCard key={runner.horse_name} runner={runner} rank={i + 1} raceId={decodeURIComponent(raceId)} raceDetail={race} />
+          ))}
+          {unscored.map((runner, i) => (
+            <HorseCard key={runner.horse_name} runner={runner} rank={orderedRunners.length + i + 1} raceId={decodeURIComponent(raceId)} raceDetail={race} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  page: { minHeight: '100vh', background: C.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: C.text },
+  header: { background: C.card, borderBottom: `1px solid ${C.border}`, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 100 },
+  backBtn: { padding: '7px 12px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, cursor: 'pointer', fontSize: 13 },
+  raceTitle: { fontSize: 18, fontWeight: 600 },
+  raceMeta: { fontSize: 12, color: C.muted, marginTop: 2 },
+  analyseBtn: { padding: '8px 16px', background: C.accent, border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginLeft: 'auto' },
+  body: { maxWidth: 960, margin: '0 auto', padding: '20px 16px' },
+  aiSection: { background: C.card, border: `1px solid ${C.accent}40`, borderRadius: 14, padding: '18px 20px', marginBottom: 20 },
+  aiHeader: { display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14, flexWrap: 'wrap' },
+  selectionBox: { marginLeft: 'auto', background: '#0e2b20', border: `1px solid ${C.accent}50`, borderRadius: 10, padding: '10px 16px', textAlign: 'center' },
+  aiText: { fontSize: 13, lineHeight: 1.75 },
+  noAnalysis: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 40, textAlign: 'center' },
+  horseCard: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', marginBottom: 10 },
+  detail: { marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` },
+  detailTabs: { display: 'flex', gap: 4, marginBottom: 14, flexWrap: 'wrap' },
+  dtab: { fontSize: 12, padding: '5px 11px', borderRadius: 8, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer' },
+  dtabActive: { background: C.border2, color: C.text, fontWeight: 500 },
+  factorsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px 20px' },
+  classGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 },
+  classCell: { background: C.bg, borderRadius: 8, padding: '8px 10px' },
+  formTable: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
+  td: { padding: '7px 8px', color: C.muted },
+  tjCard: { background: C.bg, borderRadius: 10, padding: '12px 14px' },
+  aiBox: { background: C.bg, borderRadius: 10, padding: '14px 16px', fontSize: 13, lineHeight: 1.75, color: C.muted },
+  aiBtn: { width: '100%', padding: '10px', background: C.border2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, cursor: 'pointer', fontSize: 13 },
+  rankBadge: { width: 28, height: 28, borderRadius: '50%', background: C.border, fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  horseName: { fontSize: 16, fontWeight: 600 },
+};
