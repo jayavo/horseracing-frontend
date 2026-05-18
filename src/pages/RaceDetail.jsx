@@ -9,7 +9,6 @@ const C = {
 };
 
 function getColor(v) { return v >= 70 ? C.accent : v >= 50 ? C.warn : C.danger; }
-function getBg(v) { return v >= 70 ? '#0e2b20' : v >= 50 ? '#2b1e0a' : '#2b0e0e'; }
 
 function ScoreRing({ score, size = 52 }) {
   const r = (size / 2) - 5;
@@ -66,6 +65,26 @@ function Badge({ text, type = 'neutral' }) {
   return <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 500, background: s.bg, color: s.color }}>{text}</span>;
 }
 
+function formatOdds(oddsObj) {
+  if (!oddsObj) return null;
+  const frac = oddsObj.odds_fractional;
+  const dec = oddsObj.odds_decimal;
+  if (frac && frac !== 'null' && frac !== 'undefined' && frac !== '') return frac;
+  if (dec && !isNaN(parseFloat(dec))) {
+    const d = parseFloat(dec);
+    if (d <= 1) return 'EVS';
+    return `${Math.round((d - 1) * 10) / 10}/1`;
+  }
+  return null;
+}
+
+function formatOddsDecimal(oddsObj) {
+  if (!oddsObj) return '';
+  const dec = oddsObj.odds_decimal;
+  if (dec && !isNaN(parseFloat(dec))) return `(${parseFloat(dec).toFixed(2)})`;
+  return '';
+}
+
 function HorseCard({ runner, rank, raceId, raceDetail }) {
   const [open, setOpen] = useState(rank === 1);
   const [tab, setTab] = useState('factors');
@@ -79,10 +98,10 @@ function HorseCard({ runner, rank, raceId, raceDetail }) {
 
   const trainerSR = runner.trainer_stats?.find(t => t.period === '30d')?.strike_rate;
   const jockeySR = runner.jockey_stats?.find(j => j.period === '30d')?.strike_rate;
+  const trainer14 = runner.trainer_14_days;
   const pWins = formHistory.filter(f => f.jockey === runner.jockey && parseInt(f.position) === 1).length;
   const pRuns = formHistory.filter(f => f.jockey === runner.jockey).length;
 
-  // Class analysis
   const classHistory = formHistory.reduce((acc, f) => {
     const cls = f.race_class || 'Unknown';
     if (!acc[cls]) acc[cls] = { wins: 0, runs: 0 };
@@ -93,14 +112,19 @@ function HorseCard({ runner, rank, raceId, raceDetail }) {
 
   const usualClass = Object.entries(classHistory).sort((a, b) => b[1].runs - a[1].runs)[0]?.[0] || '—';
   const todayClass = raceDetail?.race_class || '—';
-  const classMap = { 'Grade 1': 1, 'Group 1': 1, 'Grade 2': 2, 'Group 2': 2, 'Grade 3': 3, 'Group 3': 3, 'Listed': 4, 'Class 1': 5, 'Class 2': 6, 'Class 3': 7, 'Class 4': 8, 'Class 5': 9, 'Class 6': 10 };
+  const classMap = {
+    'Grade 1': 1, 'Group 1': 1, 'Grade 2': 2, 'Group 2': 2,
+    'Grade 3': 3, 'Group 3': 3, 'Listed': 4,
+    'Class 1': 5, 'Class 2': 6, 'Class 3': 7,
+    'Class 4': 8, 'Class 5': 9, 'Class 6': 10
+  };
   const usualVal = classMap[usualClass] || 6;
   const todayVal = classMap[todayClass] || 6;
   const classDrop = usualVal < todayVal ? 'drop' : usualVal > todayVal ? 'step' : 'same';
 
-  // Odds display
-  const oddsDisplay = runner.odds?.odds_fractional || runner.odds?.odds_decimal?.toFixed(0) + '/1' || null;
-  const oddsDecimal = runner.odds?.odds_decimal ? `(${parseFloat(runner.odds.odds_decimal).toFixed(2)})` : '';
+  const oddsDisplay = formatOdds(runner.odds);
+  const oddsDecimalDisplay = formatOddsDecimal(runner.odds);
+  const groundScore = s.ground_suit || 0;
 
   async function doDeepDive() {
     setLoadingDD(true);
@@ -115,10 +139,6 @@ function HorseCard({ runner, rank, raceId, raceDetail }) {
     }
   }
 
-  const groundScore = s.ground_suit || 0;
-  const showGroundSuits = groundScore >= 70;
-  const showGroundConcern = groundScore < 45;
-
   return (
     <div style={{ ...styles.horseCard, borderColor: isTopPick ? C.accent : C.border, borderWidth: isTopPick ? 2 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }} onClick={() => setOpen(!open)}>
@@ -132,9 +152,8 @@ function HorseCard({ runner, rank, raceId, raceDetail }) {
             {parseFloat(trainerSR) >= 25 && <Badge text="🔥 Hot yard" type="green" />}
             {parseFloat(jockeySR) >= 25 && <Badge text="🎯 Top jockey" type="purple" />}
             {(s.handicap_position || 0) >= 75 && <Badge text="Fav weight" type="blue" />}
-            {showGroundSuits && <Badge text="Ground suits" type="green" />}
-            {showGroundConcern && <Badge text="Ground concern" type="red" />}
-            {runner.jockey === 'NON-RUNNER' && <Badge text="NON-RUNNER" type="red" />}
+            {groundScore >= 70 && <Badge text="Ground suits" type="green" />}
+            {groundScore < 45 && <Badge text="Ground concern" type="red" />}
           </div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
             {runner.trainer} · {runner.jockey} · Age {runner.age} · OR {runner.official_rating} · {runner.weight_carried}
@@ -145,14 +164,23 @@ function HorseCard({ runner, rank, raceId, raceDetail }) {
             {classDrop === 'step' && <span style={{ color: C.danger }}> → Step up today</span>}
             {classDrop === 'same' && <span style={{ color: C.muted }}> → Same level</span>}
           </div>
+          {trainer14 && (
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>
+              Trainer 14d: <strong style={{ color: parseFloat(trainer14.percent) >= 20 ? C.accent : C.muted }}>
+                {trainer14.wins}W/{trainer14.runs}R ({trainer14.percent}%)
+              </strong>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
             {lastFive.map((p, i) => <FormDot key={i} pos={p} />)}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 18, fontWeight: 600, color: C.text }}>{oddsDisplay || '—'}</div>
-            <div style={{ fontSize: 11, color: C.muted }}>{oddsDecimal || 'odds'}</div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: oddsDisplay ? C.warn : C.muted }}>
+              {oddsDisplay || '—'}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted }}>{oddsDecimalDisplay || 'odds'}</div>
           </div>
           <ScoreRing score={s.overall_score || 50} />
           <div style={{ color: C.muted, fontSize: 16, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</div>
@@ -212,7 +240,12 @@ function HorseCard({ runner, rank, raceId, raceDetail }) {
                     {cls}{cls === todayClass ? ' ★' : ''}
                   </div>
                   <div style={{ flex: 1, height: 16, background: C.border, borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.min(100, (d.runs / Math.max(...Object.values(classHistory).map(x => x.runs))) * 100)}%`, background: cls === todayClass ? C.accent : C.border2, borderRadius: 4, display: 'flex', alignItems: 'center', paddingLeft: 6 }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.min(100, (d.runs / Math.max(...Object.values(classHistory).map(x => x.runs))) * 100)}%`,
+                      background: cls === todayClass ? C.accent : C.border2,
+                      borderRadius: 4, display: 'flex', alignItems: 'center', paddingLeft: 6
+                    }}>
                       {d.runs > 0 && <span style={{ fontSize: 9, color: '#fff', whiteSpace: 'nowrap' }}>{d.wins}W/{d.runs}R</span>}
                     </div>
                   </div>
@@ -256,30 +289,40 @@ function HorseCard({ runner, rank, raceId, raceDetail }) {
           )}
 
           {tab === 'tj' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {[
-                { title: runner.trainer, sub: 'Trainer', sr: trainerSR, stats: runner.trainer_stats },
-                { title: runner.jockey, sub: 'Jockey', sr: jockeySR, stats: runner.jockey_stats, extra: `Partnership: ${pWins}W from ${pRuns} runs together` }
-              ].map(({ title, sub, sr, stats, extra }) => (
-                <div key={sub} style={styles.tjCard}>
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{title}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>{sub}</div>
-                  {(stats || []).map(s => (
-                    <div key={s.period} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                      <span style={{ color: C.muted }}>{s.period} strike rate</span>
-                      <span style={{ fontWeight: 600, color: getColor(parseFloat(s.strike_rate) * 2.5) }}>
-                        {parseFloat(s.strike_rate).toFixed(1)}%
-                      </span>
-                    </div>
-                  ))}
-                  <div style={{ marginTop: 8, display: 'flex', gap: 3 }}>
-                    {Array.from({ length: 10 }, (_, i) => (
-                      <div key={i} style={{ width: 10, height: 10, borderRadius: 2, background: i < Math.round((parseFloat(sr) || 0) / 10) ? getColor((parseFloat(sr) || 0) * 2.5) : C.border }} />
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                {[
+                  { title: runner.trainer, sub: 'Trainer', sr: trainerSR, stats: runner.trainer_stats },
+                  { title: runner.jockey, sub: 'Jockey', sr: jockeySR, stats: runner.jockey_stats, extra: `Partnership: ${pWins}W from ${pRuns} runs together` }
+                ].map(({ title, sub, sr, stats, extra }) => (
+                  <div key={sub} style={styles.tjCard}>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{title}</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>{sub}</div>
+                    {(stats || []).map(s => (
+                      <div key={s.period} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                        <span style={{ color: C.muted }}>{s.period} strike rate</span>
+                        <span style={{ fontWeight: 600, color: getColor(parseFloat(s.strike_rate) * 2.5) }}>
+                          {parseFloat(s.strike_rate).toFixed(1)}%
+                        </span>
+                      </div>
                     ))}
+                    <div style={{ marginTop: 8, display: 'flex', gap: 3 }}>
+                      {Array.from({ length: 10 }, (_, i) => (
+                        <div key={i} style={{ width: 10, height: 10, borderRadius: 2, background: i < Math.round((parseFloat(sr) || 0) / 10) ? getColor((parseFloat(sr) || 0) * 2.5) : C.border }} />
+                      ))}
+                    </div>
+                    {extra && <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>{extra}</div>}
                   </div>
-                  {extra && <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>{extra}</div>}
+                ))}
+              </div>
+              {trainer14 && (
+                <div style={{ background: C.bg, borderRadius: 10, padding: '10px 14px', fontSize: 12 }}>
+                  <span style={{ color: C.muted }}>Trainer last 14 days: </span>
+                  <strong style={{ color: parseFloat(trainer14.percent) >= 20 ? C.accent : C.text }}>
+                    {trainer14.wins} wins from {trainer14.runs} runs ({trainer14.percent}% strike rate)
+                  </strong>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -331,11 +374,20 @@ export default function RaceDetail() {
     } catch (err) {
       alert('Analysis failed: ' + (err.response?.data?.error || err.message));
     } finally {
-      setAnalysing(false); }
+      setAnalysing(false);
+    }
   }
 
-  if (loading) return <div style={{ ...styles.page, color: C.muted, textAlign: 'center', paddingTop: 100 }}>Loading race data...</div>;
-  if (error) return <div style={{ ...styles.page, color: C.danger, textAlign: 'center', paddingTop: 100 }}>{error}</div>;
+  if (loading) return (
+    <div style={{ ...styles.page, color: C.muted, textAlign: 'center', paddingTop: 100 }}>
+      Loading race data...
+    </div>
+  );
+  if (error) return (
+    <div style={{ ...styles.page, color: C.danger, textAlign: 'center', paddingTop: 100 }}>
+      {error}
+    </div>
+  );
 
   const race = data?.race;
   const scored = data?.scored || [];
@@ -383,13 +435,20 @@ export default function RaceDetail() {
                 <div style={styles.selectionBox}>
                   <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Selection</div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: C.accent }}>{aiAnalysis.selection}</div>
-                  {aiAnalysis.confidence && <div style={{ fontSize: 11, color: C.muted }}>Confidence: {aiAnalysis.confidence}%</div>}
+                  {aiAnalysis.confidence && (
+                    <div style={{ fontSize: 11, color: C.muted }}>Confidence: {aiAnalysis.confidence}%</div>
+                  )}
                 </div>
               )}
             </div>
             <div style={styles.aiText}>
               {(aiAnalysis.analysis || '').split('\n').map((line, i) => (
-                <p key={i} style={{ margin: '5px 0', lineHeight: 1.75, color: line.includes('MY SELECTION') ? C.accent : line.startsWith('#') || /^\d+\./.test(line.trim()) ? C.text : C.muted }}>
+                <p key={i} style={{
+                  margin: '5px 0', lineHeight: 1.75,
+                  color: line.includes('MY SELECTION') ? C.accent
+                    : line.startsWith('#') || /^\d+\./.test(line.trim()) ? C.text
+                    : C.muted
+                }}>
                   {line}
                 </p>
               ))}
@@ -411,10 +470,22 @@ export default function RaceDetail() {
             Runners — ranked by analysis score
           </div>
           {orderedRunners.map((runner, i) => (
-            <HorseCard key={runner.horse_name} runner={runner} rank={i + 1} raceId={decodeURIComponent(raceId)} raceDetail={race} />
+            <HorseCard
+              key={runner.horse_name}
+              runner={runner}
+              rank={i + 1}
+              raceId={decodeURIComponent(raceId)}
+              raceDetail={race}
+            />
           ))}
           {unscored.map((runner, i) => (
-            <HorseCard key={runner.horse_name} runner={runner} rank={orderedRunners.length + i + 1} raceId={decodeURIComponent(raceId)} raceDetail={race} />
+            <HorseCard
+              key={runner.horse_name}
+              runner={runner}
+              rank={orderedRunners.length + i + 1}
+              raceId={decodeURIComponent(raceId)}
+              raceDetail={race}
+            />
           ))}
         </div>
       </div>
